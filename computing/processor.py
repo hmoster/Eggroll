@@ -70,8 +70,9 @@ class Processor(processor_pb2_grpc.ProcessServiceServicer):
 
     def __init__(self, data_dir):
         self._serdes = eggroll_serdes.get_serdes()
-        Processor.TEMP_DIR = os.sep.join([data_dir, 'lmdb_temporary'])
-        Processor.DATA_DIR = os.sep.join([data_dir, 'lmdb'])
+        Processor.TEMP_DIR = os.sep.join([data_dir, 'in_memory '])
+        Processor.LMDB_DIR = os.sep.join([data_dir, 'lmdb'])
+        Processor.LEVEL_DB_DIR = os.sep.join([data_dir, 'level_db'])
 
     @cached(cache=LRUCache(maxsize=100))
     def get_function(self, function_bytes):
@@ -392,10 +393,15 @@ class Processor(processor_pb2_grpc.ProcessServiceServicer):
 
     @staticmethod
     def _do_get_path(db_type, namespace, table, fragment):
+        dir_prefix = ''
         if db_type == storage_basic_pb2.IN_MEMORY:
-            path = os.sep.join([Processor.TEMP_DIR, namespace, table, str(fragment)])
+            dir_prefix = Processor.TEMP_DIR
+        elif db_type == storage_basic_pb2.LMDB:
+            dir_prefix = Processor.TEMP_DIR
         else:
-            path = os.sep.join([Processor.DATA_DIR, namespace, table, str(fragment)])
+            dir_prefix = Processor.LEVEL_DB_DIR
+
+        path = os.sep.join([dir_prefix, namespace, table, str(fragment)])
         return path
 
     @staticmethod
@@ -517,7 +523,8 @@ def serve(args):
     node_manager_stub = node_manager_pb2_grpc.NodeManagerServiceStub(channel)
 
     try:
-        heartbeat_request = node_manager_pb2.HeartbeatRequest(basic_meta_pb2.Endpoint(ip=engine_addr, port=port))
+        port = int(port)
+        heartbeat_request = node_manager_pb2.HeartbeatRequest(endpoint=basic_meta_pb2.Endpoint(ip=engine_addr, port=port))
         while True:
             node_manager_stub.heartbeat(heartbeat_request)
             time.sleep(_ONE_MIN_IN_SECONDS)
@@ -536,6 +543,5 @@ if __name__ == '__main__':
     parser.add_argument('-a', "--engine-addr", default="localhost")
     args = parser.parse_args()
 
-    print(args['engine-addr'])
     LOGGER.info("processor {}:{} started at {}, node-manager at {}".format(args.engine_addr, args.port, str(datetime.now()), args.node_manager))
     serve(args)

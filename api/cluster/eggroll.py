@@ -25,7 +25,7 @@ import random
 import grpc
 import copy
 
-from eggroll.api import NamingPolicy, ComputingEngine
+from eggroll.api import NamingPolicy, ComputingEngine, StoreType
 from eggroll.api.utils import eggroll_serdes, file_utils
 from eggroll.api.utils.log_utils import getLogger
 from eggroll.api.proto import kv_pb2, kv_pb2_grpc, processor_pb2, processor_pb2_grpc, storage_basic_pb2, node_manager_pb2, node_manager_pb2_grpc
@@ -77,6 +77,17 @@ def _get_meta(_table):
     return ('store_type', _table._type), ('table_name', _table._name), ('name_space', _table._namespace)
 
 
+def to_pb_store_type(_type : StoreType, persistent=False):
+    result = None
+    if not persistent:
+        result = storage_basic_pb2.IN_MEMORY
+    elif _type == StoreType.LMDB:
+        result = storage_basic_pb2.LMDB
+    elif _type == StoreType.LEVEL_DB:
+        result = storage_basic_pb2.LEVEL_DB
+    return result
+
+
 empty = kv_pb2.Empty()
 
 
@@ -109,18 +120,18 @@ class _DTable(object):
     Storage apis
     '''
 
-    def save_as(self, name, namespace, partition=None, use_serialize=True, persistent=True):
+    def save_as(self, name, namespace, partition=None, use_serialize=True, persistent=True, persistent_engine=StoreType.LMDB):
         if partition is None:
             partition = self._partitions
-        dup = _EggRoll.get_instance().table(name, namespace, partition=partition, in_place_computing=self.get_in_place_computing(), persistent=persistent)
+        dup = _EggRoll.get_instance().table(name, namespace, partition=partition, in_place_computing=self.get_in_place_computing(), persistent=persistent, persistent_engine=persistent_engine)
         dup.put_all(self.collect(use_serialize=use_serialize), use_serialize=use_serialize)
         return dup
 
     def put(self, k, v, use_serialize=True):
         _EggRoll.get_instance().put(self, k, v, use_serialize=use_serialize)
 
-    def put_all(self, kv_list: Iterable, use_serialize=True):
-        return _EggRoll.get_instance().put_all(self, kv_list, use_serialize=use_serialize)
+    def put_all(self, kv_list: Iterable, use_serialize=True, chunk_size=100000):
+        return _EggRoll.get_instance().put_all(self, kv_list, use_serialize=use_serialize, chunk_size=chunk_size)
 
     def get(self, k, use_serialize=True):
         return _EggRoll.get_instance().get(self, k, use_serialize=use_serialize)
@@ -281,13 +292,13 @@ class _EggRoll(object):
     def stop(self):
         self.session_stub.stopSession(self.eggroll_session.to_protobuf())
         self.eggroll_session.run_cleanup_tasks()
-        self.instance = None
+        _EggRoll.instance = None
         self.channel.close()
 
     def table(self, name, namespace, partition=1,
               create_if_missing=True, error_if_exist=False,
-              persistent=True, in_place_computing=False):
-        _type = storage_basic_pb2.LMDB if persistent else storage_basic_pb2.IN_MEMORY
+              persistent=True, in_place_computing=False, persistent_engine=StoreType.LMDB):
+        _type = to_pb_store_type(persistent_engine, persistent)
         storage_locator = storage_basic_pb2.StorageLocator(type=_type, namespace=namespace, name=name)
         create_table_info = kv_pb2.CreateTableInfo(storageLocator=storage_locator, fragmentCount=partition)
         _table = self._create_table(create_table_info)
@@ -297,27 +308,28 @@ class _EggRoll(object):
 
     def parallelize(self, data: Iterable, include_key=False, name=None, partition=1, namespace=None,
                     create_if_missing=True, error_if_exist=False,
-                    persistent=False, in_place_computing=False):
+                    persistent=False, chunk_size=100000, in_place_computing=False, persistent_engine=StoreType.LMDB):
         if namespace is None:
             namespace = _EggRoll.get_instance().session_id
         if name is None:
             name = str(uuid.uuid1())
-        storage_locator = storage_basic_pb2.StorageLocator(type=storage_basic_pb2.LMDB, namespace=namespace,
-                                                           name=name) if persistent else storage_basic_pb2.StorageLocator(
-            type=storage_basic_pb2.IN_MEMORY, namespace=namespace, name=name)
+
+        _type = to_pb_store_type(persistent_engine, persistent)
+
+        storage_locator = storage_basic_pb2.StorageLocator(type=_type, namespace=namespace, name=name)
         create_table_info = kv_pb2.CreateTableInfo(storageLocator=storage_locator, fragmentCount=partition)
         _table = self._create_table(create_table_info)
         _table.set_in_place_computing(in_place_computing)
         _iter = data if include_key else enumerate(data)
-        _table.put_all(_iter)
+        _table.put_all(_iter, chunk_size=chunk_size)
         LOGGER.debug("created table: %s", _table)
         return _table
 
-    def cleanup(self, name, namespace, persistent):
+    def cleanup(self, name, namespace, persistent, persistent_engine=StoreType.LMDB):
         if namespace is None or name is None:
             raise ValueError("neither name nor namespace can be None")
 
-        _type = storage_basic_pb2.LMDB if persistent else storage_basic_pb2.IN_MEMORY
+        _type = to_pb_store_type(persistent_engine, persistent)
 
         storage_locator = storage_basic_pb2.StorageLocator(type=_type, namespace=namespace, name=name)
         _table = _DTable(storage_locator=storage_locator)
@@ -400,7 +412,7 @@ class _EggRoll(object):
         operand = _EggRoll.get_instance().__generate_operand(chunked_iter, use_serialize)
         _EggRoll.get_instance().kv_stub.putAll(operand, metadata=_get_meta(_table))
 
-    def put_all(self, _table, kvs: Iterable, use_serialize=True, skip_chunk=0):
+    def put_all(self, _table, kvs: Iterable, use_serialize=True, chunk_size=100000, skip_chunk=0):
         skipped_chunk = 0
 
         chunk_size = self.chunk_size 
@@ -506,8 +518,8 @@ class _EggRoll(object):
     def flatMap(self, _table: _DTable, func):
         return self.__do_unary_process_and_create_table(table=_table, user_func=func, stub_func=self.proc_stub.flatMap)
 
-    def __create_storage_locator(self, namespace, name, type):
-        return storage_basic_pb2.StorageLocator(namespace=namespace, name=name, type=type)
+    def __create_storage_locator(self, namespace, name, _type):
+        return storage_basic_pb2.StorageLocator(namespace=namespace, name=name, type=_type)
 
     def __create_storage_locator_from_dtable(self, _table: _DTable):
         return self.__create_storage_locator(_table._namespace, _table._name, _table._type)
