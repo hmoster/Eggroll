@@ -75,7 +75,6 @@ public class PacketToOutputStreamUnidirectionalPipe extends BasePipe {
         try {
             os.flush();
         } catch (IOException ignore) {
-            ;
         }
         IOUtils.closeQuietly(os);
         super.close();

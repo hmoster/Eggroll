@@ -21,11 +21,11 @@ import com.webank.ai.eggroll.api.core.BasicMeta;
 import com.webank.ai.eggroll.api.networking.proxy.Proxy;
 
 public interface FdnRouter {
-    public BasicMeta.Endpoint route(Proxy.Topic topic);
+    BasicMeta.Endpoint route(Proxy.Topic topic);
 
-    public void setRouteTable(String filename);
+    void setRouteTable(String filename);
 
-    public boolean isAllowed(Proxy.Topic from, Proxy.Topic to);
+    boolean isAllowed(Proxy.Topic from, Proxy.Topic to);
 
-    public boolean isIntranet(BasicMeta.Endpoint endpoint);
+    boolean isIntranet(BasicMeta.Endpoint endpoint);
 }

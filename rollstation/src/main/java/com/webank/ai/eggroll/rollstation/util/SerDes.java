@@ -19,9 +19,9 @@ package com.webank.ai.eggroll.rollstation.util;
 import java.io.Serializable;
 
 public interface SerDes {
-    public Serializable serialize(Object object);
+    Serializable serialize(Object object);
 
-    public Object deserialize(Serializable serializable);
+    Object deserialize(Serializable serializable);
 
-    public <T> T deserialize(Serializable serializable, Class<T> clazz);
+    <T> T deserialize(Serializable serializable, Class<T> clazz);
 }

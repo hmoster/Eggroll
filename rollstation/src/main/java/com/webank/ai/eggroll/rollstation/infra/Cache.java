@@ -22,9 +22,9 @@ import com.webank.ai.eggroll.api.networking.proxy.Proxy;
 import java.io.InputStream;
 
 public interface Cache {
-    public InputStream read(Proxy.Metadata metadata);
+    InputStream read(Proxy.Metadata metadata);
 
-    public byte[] write(Proxy.Metadata metadata, byte[] data);
+    byte[] write(Proxy.Metadata metadata, byte[] data);
 
-    public Proxy.Metadata getCachedMetadata(BasicMeta.Endpoint dst);
+    Proxy.Metadata getCachedMetadata(BasicMeta.Endpoint dst);
 }

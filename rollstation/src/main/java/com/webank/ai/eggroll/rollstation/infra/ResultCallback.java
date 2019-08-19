@@ -17,9 +17,9 @@
 package com.webank.ai.eggroll.rollstation.infra;
 
 public interface ResultCallback<T> {
-    public T getResult();
+    T getResult();
 
-    public void setResult(T t);
+    void setResult(T t);
 
-    public boolean hasResult();
+    boolean hasResult();
 }

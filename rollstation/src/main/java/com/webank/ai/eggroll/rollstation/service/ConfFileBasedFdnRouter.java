@@ -124,7 +124,6 @@ public class ConfFileBasedFdnRouter implements FdnRouter {
                 try {
                     jsonReader.close();
                 } catch (IOException ignore) {
-                    ;
                 }
             }
         }

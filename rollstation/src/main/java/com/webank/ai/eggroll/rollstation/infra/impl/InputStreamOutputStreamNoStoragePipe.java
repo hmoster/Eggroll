@@ -145,7 +145,6 @@ public class InputStreamOutputStreamNoStoragePipe extends BasePipe {
         try {
             os.flush();
         } catch (IOException ignore) {
-            ;
         }
 /*        IOUtils.closeQuietly(is);
         IOUtils.closeQuietly(os);*/

@@ -19,29 +19,29 @@ package com.webank.ai.eggroll.rollstation.infra;
 import java.util.concurrent.TimeUnit;
 
 public interface Pipe {
-    public Object read();
+    Object read();
 
-    public Object read(long timeout, TimeUnit unit);
+    Object read(long timeout, TimeUnit unit);
 
-    public void write(Object o);
+    void write(Object o);
 
-    public void onError(Throwable t);
+    void onError(Throwable t);
 
-    public void onComplete();
+    void onComplete();
 
-    public boolean isDrained();
+    boolean isDrained();
 
-    public void setDrained();
+    void setDrained();
 
-    public void close();
+    void close();
 
-    public boolean isClosed();
+    boolean isClosed();
 
-    public void awaitClosed() throws InterruptedException;
+    void awaitClosed() throws InterruptedException;
 
-    public void awaitClosed(long timeout, TimeUnit unit) throws InterruptedException;
+    void awaitClosed(long timeout, TimeUnit unit) throws InterruptedException;
 
-    public boolean hasError();
+    boolean hasError();
 
-    public Throwable getError();
+    Throwable getError();
 }
